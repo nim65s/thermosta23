@@ -9,6 +9,10 @@ pub enum Error {
     SerdeJson(#[from] serde_json::Error),
 
     #[cfg(feature = "esp32c3")]
+    #[error("aht20 error {0:?}")]
+    Aht20(#[from] aht20::Error<esp32c3_hal::i2c::Error>),
+
+    #[cfg(feature = "esp32c3")]
     #[error("uart error {0:?}")]
     Uart(esp32c3_hal::uart::Error),
 

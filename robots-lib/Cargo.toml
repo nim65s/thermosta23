@@ -6,6 +6,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+aht20 = { git = "https://github.com/nim65s/aht20", branch = "async" }
 heapless = "0.7"
 postcard = { version = "1", features = ["postcard-derive", "experimental-derive"] }
 serde = { version = "1", default-features = false, features = ["derive"] }

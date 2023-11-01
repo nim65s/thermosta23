@@ -4,6 +4,7 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+use aht20::{Aht20, Humidity, Temperature};
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
@@ -13,8 +14,9 @@ use esp32c3_hal::{
     clock::ClockControl,
     embassy,
     gpio::{GpioPin, Input, PullUp},
+    i2c::I2C,
     interrupt,
-    peripherals::{Interrupt, Peripherals, UART0, UART1},
+    peripherals::{Interrupt, Peripherals, I2C0, UART0, UART1},
     prelude::*,
     rmt::{Channel0, Rmt},
     uart::{
@@ -47,6 +49,13 @@ fn monitor_err(mon_sig: &'static MonSignal, e: impl Into<Error>) {
     use core::fmt::Write;
     let mut out = String::new();
     write!(&mut out, "{:?}", e.into()).unwrap();
+    mon_sig.signal(out);
+}
+
+fn monitor_ht(mon_sig: &'static MonSignal, h: Humidity, t: Temperature) {
+    use core::fmt::Write;
+    let mut out = String::new();
+    write!(&mut out, "h {} t {}", h.rh(), t.celsius()).unwrap();
     mon_sig.signal(out);
 }
 
@@ -132,6 +141,29 @@ async fn ping_task(cmd_sig: &'static CmdSignal, mon_sig: &'static MonSignal) {
     }
 }
 
+#[embassy_executor::task]
+async fn aht20_task(
+    i2c: I2C<'static, I2C0>,
+    cmd_sig: &'static CmdSignal,
+    mon_sig: &'static MonSignal,
+) {
+    match Aht20::new(i2c).await {
+        Err(e) => monitor_err(mon_sig, e),
+        Ok(mut aht20) => loop {
+            match aht20.read_ht().await {
+                Ok((h, t)) => {
+                    monitor_ht(mon_sig, h, t);
+                    Timer::after(Duration::from_millis(20)).await;
+                    cmd_sig.signal(Cmd::HT(h, t));
+                }
+                Err(e) => monitor_err(mon_sig, e),
+            }
+            Timer::after(Duration::from_secs(10)).await;
+        },
+    }
+    mon_sig.signal(String::from("aht stop"));
+}
+
 #[main]
 async fn main(spawner: Spawner) {
     let peripherals = Peripherals::take();
@@ -161,8 +193,17 @@ async fn main(spawner: Spawner) {
     let serial1 = Uart::new_with_config(peripherals.UART1, Config::default(), Some(pins1), &clocks);
     let (tx1, _) = serial1.split();
 
-    interrupt::enable(Interrupt::UART0, interrupt::Priority::Priority1).unwrap();
-    interrupt::enable(Interrupt::GPIO, interrupt::Priority::Priority2).unwrap();
+    let i2c0 = I2C::new(
+        peripherals.I2C0,
+        io.pins.gpio4,
+        io.pins.gpio5,
+        1u32.kHz(),
+        &clocks,
+    );
+
+    interrupt::enable(Interrupt::I2C_EXT0, interrupt::Priority::Priority1).unwrap();
+    interrupt::enable(Interrupt::UART0, interrupt::Priority::Priority2).unwrap();
+    interrupt::enable(Interrupt::GPIO, interrupt::Priority::Priority3).unwrap();
 
     let cmd_sig = make_static!(Signal::new());
     let hue_sig = make_static!(Signal::new());
@@ -174,4 +215,5 @@ async fn main(spawner: Spawner) {
     spawner.spawn(btn_task(btn, cmd_sig, mon_sig)).ok();
     spawner.spawn(ping_task(cmd_sig, mon_sig)).ok();
     spawner.spawn(monitor_task(tx1, mon_sig)).ok();
+    spawner.spawn(aht20_task(i2c0, cmd_sig, mon_sig)).ok();
 }

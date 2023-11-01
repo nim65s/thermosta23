@@ -10,6 +10,7 @@ use actix_web::web::Bytes;
 mod error;
 pub use crate::error::{Error, Result};
 
+use aht20::{Humidity, Temperature};
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,7 @@ pub enum Cmd {
     Pong,
     Button,
     Hue(u8),
+    HT(Humidity, Temperature),
 }
 
 pub const CMD_MAX_SIZE: usize = Cmd::POSTCARD_MAX_SIZE + 2;
