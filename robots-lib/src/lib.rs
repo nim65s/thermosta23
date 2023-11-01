@@ -22,6 +22,7 @@ pub enum Cmd {
     Pong,
     Button,
     Hue(u8),
+    Relay(bool),
     HT(Humidity, Temperature),
 }
 

@@ -13,7 +13,7 @@ use embedded_io_async::Write;
 use esp32c3_hal::{
     clock::ClockControl,
     embassy,
-    gpio::{GpioPin, Input, PullUp},
+    gpio::{GpioPin, Input, Output, PullUp, PushPull},
     i2c::I2C,
     interrupt,
     peripherals::{Interrupt, Peripherals, I2C0, UART0, UART1},
@@ -39,11 +39,13 @@ use static_cell::make_static;
 type CmdSignal = Signal<NoopRawMutex, Cmd>;
 type HueSignal = Signal<NoopRawMutex, u8>;
 type MonSignal = Signal<NoopRawMutex, String<100>>;
+type RelSignal = Signal<NoopRawMutex, bool>;
 type TX0 = UartTx<'static, UART0>;
 type RX0 = UartRx<'static, UART0>;
 type TX1 = UartTx<'static, UART1>;
 type Led = SmartLedsAdapter<Channel0<0>, 0, 25>;
 type Btn = GpioPin<Input<PullUp>, 9>;
+type Relay = GpioPin<Output<PushPull>, 6>;
 
 fn monitor_err(mon_sig: &'static MonSignal, e: impl Into<Error>) {
     use core::fmt::Write;
@@ -75,6 +77,7 @@ async fn rx_task(
     mut rx: RX0,
     cmd_sig: &'static CmdSignal,
     hue_sig: &'static HueSignal,
+    rel_sig: &'static RelSignal,
     mon_sig: &'static MonSignal,
 ) {
     let mut rbuf: [u8; CMD_MAX_SIZE] = [0u8; CMD_MAX_SIZE];
@@ -88,6 +91,7 @@ async fn rx_task(
                     Err(e) => monitor_err(mon_sig, e),
                     Ok(Cmd::Ping) => cmd_sig.signal(Cmd::Pong),
                     Ok(Cmd::Hue(h)) => hue_sig.signal(h),
+                    Ok(Cmd::Relay(relay)) => rel_sig.signal(relay),
                     Ok(_) => {}
                 };
             }
@@ -164,6 +168,15 @@ async fn aht20_task(
     mon_sig.signal(String::from("aht stop"));
 }
 
+#[embassy_executor::task]
+async fn relay_task(mut relay: Relay, rel_sig: &'static RelSignal, mon_sig: &'static MonSignal) {
+    loop {
+        let r = rel_sig.wait().await;
+        relay.set_state(r.into()).unwrap();
+        mon_sig.signal(String::from("relay stop"));
+    }
+}
+
 #[main]
 async fn main(spawner: Spawner) {
     let peripherals = Peripherals::take();
@@ -174,6 +187,7 @@ async fn main(spawner: Spawner) {
     let rmt = Rmt::new(peripherals.RMT, 80u32.MHz(), &clocks).unwrap();
     let led = <smartLedAdapter!(0, 1)>::new(rmt.channel0, io.pins.gpio8);
 
+    let relay = io.pins.gpio6.into_push_pull_output();
     let btn = io.pins.gpio9.into_pull_up_input();
 
     let timer_group0 = esp32c3_hal::timer::TimerGroup::new(peripherals.TIMG0, &clocks);
@@ -208,12 +222,16 @@ async fn main(spawner: Spawner) {
     let cmd_sig = make_static!(Signal::new());
     let hue_sig = make_static!(Signal::new());
     let mon_sig = make_static!(Signal::new());
+    let rel_sig = make_static!(Signal::new());
 
-    spawner.spawn(rx_task(rx0, cmd_sig, hue_sig, mon_sig)).ok();
+    spawner
+        .spawn(rx_task(rx0, cmd_sig, hue_sig, rel_sig, mon_sig))
+        .ok();
     spawner.spawn(tx_task(tx0, cmd_sig, mon_sig)).ok();
     spawner.spawn(led_task(led, hue_sig, mon_sig)).ok();
     spawner.spawn(btn_task(btn, cmd_sig, mon_sig)).ok();
     spawner.spawn(ping_task(cmd_sig, mon_sig)).ok();
     spawner.spawn(monitor_task(tx1, mon_sig)).ok();
     spawner.spawn(aht20_task(i2c0, cmd_sig, mon_sig)).ok();
+    spawner.spawn(relay_task(relay, rel_sig, mon_sig)).ok();
 }

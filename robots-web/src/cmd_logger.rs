@@ -56,6 +56,9 @@ pub fn CmdLogger() -> impl IntoView {
     view! {
         <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Ping)}>"Ping"</button>
         <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Pong)}>"Pong"</button>
+        <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Relay(true))}>"ON"</button>
+        <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Relay(false))}>"OFF"</button>
+        <br />
         <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Hue(0))}>"Red"</button>
         <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Hue(50))}>"Yellow"</button>
         <button class={button} on:click=move |_| {cmd_sender.dispatch(Cmd::Hue(100))}>"Green"</button>
