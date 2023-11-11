@@ -4,6 +4,7 @@ clippy := "cargo clippy --color always"
 test := "cargo test --color always"
 lib := "--package robots-lib"
 drv := "--package robots-drv"
+th := "--package robots-th"
 back := "--package robots-web -F ssr"
 front := "--package robots-web -F hydrate --target wasm32-unknown-unknown"
 
@@ -18,6 +19,9 @@ check-stm:
 
 check-drv:
     {{check}} {{drv}}
+
+check-th:
+    {{check}} {{th}}
 
 check-back:
     {{check}} {{back}}
@@ -36,6 +40,9 @@ clippy-stm:
 
 clippy-drv:
     {{clippy}} {{drv}}
+
+clippy-th:
+    {{clippy}} {{th}}
 
 clippy-back:
     {{clippy}} {{back}}
@@ -63,8 +70,11 @@ esp-mon:
 drv:
     cargo run --package robots-drv
 
+th:
+    cargo run --package robots-th
+
 web:
     cargo leptos watch
 
 
-all: clippy-lib clippy-esp clippy-stm clippy-drv test
+all: clippy-lib clippy-esp clippy-stm clippy-drv clippy-th test
