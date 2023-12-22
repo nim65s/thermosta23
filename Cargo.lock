@@ -2610,6 +2610,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "robots-onoff"
+version = "0.1.0"
+dependencies = [
+ "broadcaster",
+ "bytes",
+ "futures",
+ "lazy_static",
+ "robots-drv",
+ "robots-lib",
+ "serialport",
+ "thiserror",
+ "tokio",
+ "tokio-serial",
+ "tokio-util",
+]
+
+[[package]]
 name = "robots-th"
 version = "0.1.0"
 dependencies = [
